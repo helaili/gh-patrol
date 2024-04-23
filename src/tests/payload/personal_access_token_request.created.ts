@@ -3,7 +3,7 @@ import { PersonalAccessTokenRequestCreatedEvent } from "../../utils/webhooks-typ
 export const personal_access_token_request_created : PersonalAccessTokenRequestCreatedEvent = {
   "action": "created",
   "personal_access_token_request": {
-    "id": 415250,
+    "id": 415440,
     "owner": {
       "login": "halain987",
       "id": 18029382,

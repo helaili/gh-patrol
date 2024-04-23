@@ -11,7 +11,9 @@
     "test": "npx jest --detectOpenHandles"
   },
   "dependencies": {
-    "@azure/functions": "^4.0.0"
+    "@azure/functions": "^4.0.0",
+    "@octokit/auth-app": "^6.1.1",
+    "@octokit/rest": "^20.1.0"
   },
   "devDependencies": {
     "@octokit/webhooks-types": "^7.5.1",
