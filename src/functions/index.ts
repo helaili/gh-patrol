@@ -1,15 +1,15 @@
 import { app } from "@azure/functions";
-import { githubWebhook } from "./githubWebhook";
-import { pingWebhook } from "./pingWebhook";
+import { webhook } from "./webhook";
+import { ping } from "./ping";
 
-app.http('githubWebhook', {
+app.http('webhook', {
     methods: ['POST'],
     authLevel: 'anonymous',
-    handler: githubWebhook
+    handler: webhook
 });
 
 app.http('ping', {
     methods: ['GET'],
     authLevel: 'anonymous',
-    handler: pingWebhook
+    handler: ping
 });
