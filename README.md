@@ -1,4 +1,13 @@
 
+# Config
+## Environment Variables
+- `WEBHOOK_SECRET` - The secret used to sign the webhook payload.
+- `APP_ID` - The GitHub App ID.
+- `PRIVATE_KEY` - The GitHub App private key.
+
+## Local Development
+- `AZURE_FUNCTIONS_ENVIRONMENT` - Set to `Development` when running locally to bypass the need for a Webhook Secret.
+- `PRIVATE_KEY_FILE` - The path to the private key file for the GitHub App when running locally.
 
 # Test
 ## Test the local ping service locally
