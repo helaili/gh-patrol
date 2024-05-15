@@ -4,8 +4,8 @@ const { Octokit } = require('@octokit/rest');
 import * as crypto from 'crypto';
 import * as fs from 'fs';
 import { Logger } from '../utils/logger';
-// import { WebhookEvent } from '@octokit/webhooks-types';
 import { PersonalAccessTokenRequestCreatedEvent } from "../utils/webhooks-types-extra";
+import * as yaml from 'js-yaml';
 
 const WEBHOOK_SECRET: string = process.env.WEBHOOK_SECRET;
 const APP_ID = process.env.APP_ID; 
@@ -58,6 +58,29 @@ async function getInstallationAccessToken(installationId) {
   return authentication.token;
 }
 
+// Define the schema for the gh-patrol.yaml file
+interface GHPatrolConfig {
+  name: string;
+  users: string[];
+  teams: string[];
+  max_duration: string;
+  repository_permissions: string[];
+  org_permissions: string[];
+}
+
+// Load and parse the gh-patrol.yaml file from the .github-private repository
+async function loadGHPatrolConfig(org: string, installationId: number): Promise<GHPatrolConfig[]> {
+  const token = await getInstallationAccessToken(installationId);
+  const octokit = new Octokit({ auth: token });
+  const content = await octokit.repos.getContent({
+    owner: org,
+    repo: '.github-private',
+    path: 'gh-patrol.yaml',
+  });
+
+  const configContent = Buffer.from(content.data.content, 'base64').toString();
+  return yaml.load(configContent) as GHPatrolConfig[];
+}
 
 export async function webhook(request: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> {
   context.log(`Http function processed request for url '${request.url}'`);
@@ -108,6 +131,13 @@ export async function handlePATRequestWebhookEvent(request: HttpRequest, logger:
 
 export async function handlePATRequestCreatedWebhookEvent(request: HttpRequest, logger: Logger, patRequest: PersonalAccessTokenRequestCreatedEvent): Promise<HttpResponseInit> {
   try {
+    const configs = await loadGHPatrolConfig(patRequest.organization.login, patRequest.installation.id);
+    const userConfig = configs.find(config => config.users.includes(patRequest.sender.login) || config.users.includes('all'));
+    if (!userConfig) {
+      logger.log(`User ${patRequest.sender.login} is not authorized to create a PAT.`);
+      return { status: 403, body: 'User is not authorized to create a PAT' };
+    }
+
     logger.log(`PAT request created by ${patRequest.sender.login} with id ${patRequest.personal_access_token_request.id}`);
     const token = await getInstallationAccessToken(patRequest.installation.id);
     const octokit = new Octokit({ auth: token });
@@ -115,10 +145,10 @@ export async function handlePATRequestCreatedWebhookEvent(request: HttpRequest, 
       org: patRequest.organization.login,
       pat_request_id: patRequest.personal_access_token_request.id,
       action: "approve",
-      reason: "Automatically approved by the GitHub App"
+      reason: "Automatically approved by the GitHub App based on gh-patrol.yaml configuration"
     });
     if (response.status !== 204) {
-      logger.log(`Failed to porcess personal access token request: ${response.status}`);
+      logger.log(`Failed to process personal access token request: ${response.status}`);
       return { status: 500, body: 'Failed to process PAT request' };
     } else {
       return { status: 200, body: 'Ok' };
@@ -127,4 +157,3 @@ export async function handlePATRequestCreatedWebhookEvent(request: HttpRequest, 
     return { status: 500, body: 'Something went wrong' };
   }
 }
-
