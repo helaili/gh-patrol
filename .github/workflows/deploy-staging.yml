@@ -64,4 +64,4 @@ jobs:
         az functionapp config appsettings set --name ${{ vars.AZURE_FUNCTIONAPP_NAME }}-staging --resource-group ${{ vars.AZURE_RESOURCE_GROUP }} --settings \
           "WEBHOOK_SECRET=${{ secrets.WEBHOOK_SECRET }}" \ 
           "PRIVATE_KEY=${{ secrets.PRIVATE_KEY }}" \
-          "APP_ID=${{ vars.APP_ID }}" \
+          "APP_ID=${{ vars.APP_ID }}"
