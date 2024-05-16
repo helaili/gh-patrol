@@ -1,0 +1,67 @@
+name: Deploy Azure Function App to Dev
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - 'main'
+
+env:
+  AZURE_FUNCTIONAPP_PACKAGE_PATH: '.'
+  NODE_VERSION: '18.x'
+
+permissions:
+  id-token: write # This is required for requesting the JWT
+  contents: read  # This is required for actions/checkout
+  
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: staging
+      url: ${{ steps.fa.outputs.app-url }}
+    
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+    
+    - name: Setup Node ${{ env.NODE_VERSION }} Environment
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+
+    - name: npm install, build, and test
+      shell: bash
+      run: |
+        pushd './${{ env.AZURE_FUNCTIONAPP_PACKAGE_PATH }}'
+        npm install
+        npm run build --if-present
+        npm run test --if-present
+        popd
+      
+    - name: 'Run Azure Functions Action'
+      uses: Azure/functions-action@v1
+      id: fa
+      with:
+        app-name: ${{ vars.AZURE_FUNCTIONAPP_NAME }}
+        package: ${{ env.AZURE_FUNCTIONAPP_PACKAGE_PATH }}
+        publish-profile: ${{ secrets.AZURE_FUNCTIONAPP_PUBLISH_PROFILE }}
+    
+  configure:
+    runs-on: ubuntu-latest
+    environment:
+      name: staging
+    steps:
+    - name: 'Az CLI login'
+      uses: azure/login@v1
+      with:
+        client-id: ${{ secrets.AZURE_CLIENT_ID }}
+        tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+        subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+    - name: Configure Azure Functions Environment
+      run: |
+        az functionapp config appsettings set --name ${{ vars.AZURE_FUNCTIONAPP_NAME }}-${{ github.job.environment }} --resource-group ${{ vars.AZURE_RESOURCE_GROUP }} --settings \
+          "WEBHOOK_SECRET=${{ secrets.WEBHOOK_SECRET }}" \ 
+          "PRIVATE_KEY=${{ secrets.PRIVATE_KEY }}" \
+          "APP_ID=${{ vars.APP_ID }}" \
