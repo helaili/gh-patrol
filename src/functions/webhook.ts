@@ -3,9 +3,10 @@ const { createAppAuth } = require('@octokit/auth-app');
 const { Octokit } = require('@octokit/rest');
 import * as crypto from 'crypto';
 import * as fs from 'fs';
+import * as yaml from 'js-yaml';
 import { Logger } from '../utils/logger';
-// import { WebhookEvent } from '@octokit/webhooks-types';
 import { PersonalAccessTokenRequestCreatedEvent } from "../utils/webhooks-types-extra";
+import { GHPatrolConfig } from "../utils/gh-patrol-config";
 
 const WEBHOOK_SECRET: string = process.env.WEBHOOK_SECRET;
 const APP_ID = process.env.APP_ID; 
@@ -58,6 +59,39 @@ async function getInstallationAccessToken(installationId) {
   return authentication.token;
 }
 
+// Load and parse the gh-patrol.yaml file from the .github-private repository
+export async function loadGHPatrolConfig(org: string, installationId: number): Promise<GHPatrolConfig[]> {
+  const token = await getInstallationAccessToken(installationId);
+  const octokit = new Octokit({ auth: token });
+  const content = await octokit.repos.getContent({
+    owner: org,
+    repo: '.github-private',
+    path: 'gh-patrol.yaml',
+  });
+
+  const configContent = Buffer.from(content.data.content, 'base64').toString();
+ 
+  return yaml.load(configContent) as GHPatrolConfig[];
+}
+
+// Find the config that matches the sender login
+export async function getUserConfig(configs: GHPatrolConfig[], requestOwnerLogin: string): Promise<GHPatrolConfig | undefined> {
+  return configs.find(config => config.users.includes(requestOwnerLogin) || config.users.includes('all'));
+}
+
+// Check if the token request is valid based on the config
+export function checkTokenRequestValidity(patRequest: PersonalAccessTokenRequestCreatedEvent, config: GHPatrolConfig) : Boolean {
+  // Check if the token_expires_at is before the current time plus the max_duration
+  const maxExpirationTime = Date.now() + config.max_duration * 24 * 60 * 60 * 1000; // Convert max_duration to milliseconds
+  const tokenExpirationTime = new Date(patRequest.personal_access_token_request.token_expires_at).getTime(); // Convert token_expires_at to milliseconds
+
+  if (tokenExpirationTime > maxExpirationTime) {
+    return false
+  }
+
+  // If we reach this point, the token request is valid
+  return true;
+}
 
 export async function webhook(request: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> {
   context.log(`Http function processed request for url '${request.url}'`);
@@ -91,9 +125,7 @@ export async function handleWebhookEvent(request: HttpRequest, logger: Logger, w
   }
 };
 
-
 export async function handlePATRequestWebhookEvent(request: HttpRequest, logger: Logger, webhookObject: PersonalAccessTokenRequestCreatedEvent): Promise<HttpResponseInit> {
-  logger.log('PAT request received');
   if('action' in webhookObject) {
     switch(webhookObject.action) {
       case 'created':
@@ -101,6 +133,7 @@ export async function handlePATRequestWebhookEvent(request: HttpRequest, logger:
         return await handlePATRequestCreatedWebhookEvent(request, logger, webhookObject);
       default:
         logger.log(`Unhandled personal access token request action: ${webhookObject.action}`);
+        return { status: 202, body: 'Nothing to do here' };
     }
   }
   return { status: 501, body: 'Missing action in personal access token request event payload' };
@@ -109,16 +142,35 @@ export async function handlePATRequestWebhookEvent(request: HttpRequest, logger:
 export async function handlePATRequestCreatedWebhookEvent(request: HttpRequest, logger: Logger, patRequest: PersonalAccessTokenRequestCreatedEvent): Promise<HttpResponseInit> {
   try {
     logger.log(`PAT request created by ${patRequest.sender.login} with id ${patRequest.personal_access_token_request.id}`);
-    const token = await getInstallationAccessToken(patRequest.installation.id);
-    const octokit = new Octokit({ auth: token });
-    const response = await octokit.request("POST /orgs/{org}/personal-access-token-requests/{pat_request_id}", {
+    
+    const responsePayload =  {
       org: patRequest.organization.login,
       pat_request_id: patRequest.personal_access_token_request.id,
       action: "approve",
-      reason: "Automatically approved by the GitHub App"
-    });
+      reason: "Automatically approved by the GitHub App based on gh-patrol.yaml configuration"
+    };
+
+    const configs = await loadGHPatrolConfig(patRequest.organization.login, patRequest.installation.id);
+    const userConfig = await getUserConfig(configs, patRequest.personal_access_token_request.owner.login);
+
+    if (!userConfig) {
+      logger.log(`User ${patRequest.personal_access_token_request.owner.login} is not authorized to create a PAT.`);
+      responsePayload.action = "deny";
+      responsePayload.reason = "User is not authorized to create a PAT";
+    }
+
+    const isValidTokenRequest = checkTokenRequestValidity(patRequest, userConfig);
+    if(!isValidTokenRequest) {
+      logger.log(`PAT request denied for ${patRequest.sender.login}: expiration date was ${patRequest.personal_access_token_request.token_expires_at} and max duration is ${userConfig.max_duration} days.`);
+      responsePayload.action = "deny";
+      responsePayload.reason = "Token expiration date is too far in the future";
+    }
+
+    const token = await getInstallationAccessToken(patRequest.installation.id);
+    const octokit = new Octokit({ auth: token });
+    const response = await octokit.request("POST /orgs/{org}/personal-access-token-requests/{pat_request_id}", responsePayload);
     if (response.status !== 204) {
-      logger.log(`Failed to porcess personal access token request: ${response.status}`);
+      logger.log(`Failed to process personal access token request: ${response.status}`);
       return { status: 500, body: 'Failed to process PAT request' };
     } else {
       return { status: 200, body: 'Ok' };
@@ -127,4 +179,3 @@ export async function handlePATRequestCreatedWebhookEvent(request: HttpRequest, 
     return { status: 500, body: 'Something went wrong' };
   }
 }
-

@@ -1,12 +1,9 @@
+- name: helailis
+  users:
+    - halain987
+    - helaili
+  max_duration: 2
 - name: all users
   users:
     - all
-  teams: 
-    - all
-  max_duration: 1d
-  repository_permissions:
-    - admin
-    - push
-    - pull
-  org_permissions:
-    - all
+  max_duration: 1
