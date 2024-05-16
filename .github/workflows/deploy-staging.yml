@@ -32,6 +32,10 @@ jobs:
 
     - name: npm install, build, and test
       shell: bash
+      env:
+        PRIVATE_KEY: ${{ secrets.PRIVATE_KEY }}
+        WEBHOOK_SECRET: ${{ secrets.WEBHOOK_SECRET }}
+        APP_ID: ${{ vars.APP_ID }}
       run: |
         pushd './${{ env.AZURE_FUNCTIONAPP_PACKAGE_PATH }}'
         npm install
