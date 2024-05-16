@@ -17,7 +17,7 @@ function getPrivateKey() : string {
   if (process.env.AZURE_FUNCTIONS_ENVIRONMENT && process.env.AZURE_FUNCTIONS_ENVIRONMENT === 'Development') {
     return fs.readFileSync(process.env.PRIVATE_KEY_FILE, 'utf8');
   } else {
-    return process.env.PRIVATE_KEY
+    return Buffer.from(process.env.PRIVATE_KEY, 'base64').toString('utf8');
   }
 }
 
