@@ -25,7 +25,7 @@ Automate the approval of fine grained Personal Access Tokens in GitHub. You can 
   max_duration: 1
 ```
 
-Users now need to create a fine grained PAT with a short enough duration. When a user requests a personal access token, the application will check the `gh-patrol.yaml` file to determine the maximum duration of the token. If the user is not listed in the file, the token will be granted for a maximum of 1 day. If the user is listed in the file, the token will be granted for the maximum duration specified in the file. When their token expires, users need to log back to the GitHub website and regenerate the token. It will go through the same approval process but its value will not change. 
+Users now need to create a fine grained PAT with a short enough duration. When a user requests a personal access token, the application will check the `gh-patrol.yaml` file to determine the maximum duration of the token. If the user is not listed in the file, the token will be granted for a maximum of 1 day. If the user is listed in the file, the token will be granted for the maximum duration specified in the file. When their token expires, users need to log back to the GitHub website and regenerate the token. It will go through the same approval process and its value will change. 
 
 Cloning repos using `git clone https://github_pat_xxxxxx@github.com/<your organization>/<your repo>`.
 
